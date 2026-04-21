@@ -69,11 +69,11 @@ class Ps_freeshippingteaser extends Module
             );
             Configuration::updateValue(
                 'FST_TEASER_TEXT',
-                pSQL(Tools::getValue('FST_TEASER_TEXT'))
+                Tools::getValue('FST_TEASER_TEXT')
             );
             Configuration::updateValue(
                 'FST_SUCCESS_TEXT',
-                pSQL(Tools::getValue('FST_SUCCESS_TEXT'))
+                Tools::getValue('FST_SUCCESS_TEXT')
             );
             $output .= $this->displayConfirmation($this->l('Settings updated.'));
         }
@@ -195,7 +195,10 @@ class Ps_freeshippingteaser extends Module
             return '';
         }
 
-        $cart      = $this->context->cart;
+        $cart = $this->context->cart;
+        if ($cart === null) {
+            return '';
+        }
         $currency  = $this->context->currency;
         $cartTotal = (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
 

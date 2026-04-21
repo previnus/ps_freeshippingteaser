@@ -34,6 +34,7 @@
     var ajaxUrl = containers[0].getAttribute('data-ajax-url');
     if (!ajaxUrl) { return; }
 
+    if (!prestashop.static_token) { return; }
     var formData = new FormData();
     formData.append('token', prestashop.static_token);
 
