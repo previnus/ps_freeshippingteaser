@@ -2,7 +2,6 @@
   'use strict';
 
   var ajaxUrl = null;
-  var miniObserver = null;
 
   function escapeHtml(str) {
     var div = document.createElement('div');
@@ -46,52 +45,26 @@
   }
 
   /*
-   * Find a suitable insertion slot inside the visible mini/sidebar cart.
-   * Tries every common selector across PS Classic, blockcart variants, and
-   * popular sidebar-cart themes.
+   * Inject or update the teaser inside the Elementor sidebar cart.
+   * Target: between .elementor-cart__products and .elementor-cart__summary.
    */
-  function findMiniCartSlot() {
-    var candidates = [
-      /* PS Classic blockcart modal */
-      '#blockcart-modal .modal-body',
-      '#blockcart-modal .cart-content',
-      /* Slide-out / drawer cart variants */
-      '.cart-sidebar .cart-body',
-      '.cart-sidebar .cart-products',
-      '.cart-drawer .cart-body',
-      '.cart-drawer .cart-products',
-      /* Generic offcanvas patterns */
-      '[id*="cart"][class*="sidebar"] .cart-products',
-      '[id*="cart"][class*="modal"] .modal-body',
-      '[id*="cart"][class*="offcanvas"] .offcanvas-body',
-      /* Fallback: any visible blockcart container */
-      '.blockcart .modal-body',
-      '.blockcart-content',
-    ];
-
-    for (var i = 0; i < candidates.length; i++) {
-      var el = document.querySelector(candidates[i]);
-      if (el) { return el; }
-    }
-    return null;
-  }
-
-  function injectOrUpdateMini(innerHtml) {
-    var existing = document.querySelector('.fst-mini');
+  function injectOrUpdateElementorCart(innerHtml) {
+    var existing = document.querySelector('.elementor-cart__main .fst-mini');
     if (existing) {
       existing.innerHTML = innerHtml;
       return;
     }
 
-    var slot = findMiniCartSlot();
-    if (!slot) { return; }
+    /* Insert before the totals summary block */
+    var summary = document.querySelector('.elementor-cart__summary');
+    if (!summary) { return; }
 
     var mini = document.createElement('div');
     mini.className = 'freeshipping-teaser fst-mini';
     var url = getAjaxUrl();
     if (url) { mini.setAttribute('data-ajax-url', url); }
     mini.innerHTML = innerHtml;
-    slot.insertAdjacentElement('afterbegin', mini);
+    summary.insertAdjacentElement('beforebegin', mini);
   }
 
   /* --- Fetch fresh data and push to all teaser containers --- */
@@ -113,48 +86,39 @@
           el.innerHTML = html;
         });
 
-        /* Inject / update in mini cart */
-        injectOrUpdateMini(html);
+        /* Elementor sidebar cart */
+        injectOrUpdateElementorCart(html);
       })
       .catch(function () { /* non-critical */ });
   }
 
   /*
-   * Watch the mini cart container for visibility changes (class / style).
-   * The blockcart sidebar is typically already in the DOM, just hidden — so
-   * childList MutationObserver won't catch it opening; attribute changes will.
+   * Elementor cart drawer: watch the parent widget element for the
+   * open state. Elementor toggles aria-expanded / a class on the
+   * toggle button and animates the panel via the .elementor-cart__main
+   * wrapper's grandparent. We observe body-level class changes and
+   * the cart main element's own attribute changes to catch it opening.
    */
-  function observeMiniCart() {
-    /* Try to find the top-level mini cart wrapper to observe */
-    var wrappers = [
-      document.getElementById('blockcart-modal'),
-      document.querySelector('.cart-sidebar'),
-      document.querySelector('.cart-drawer'),
-      document.querySelector('[id*="cart"][class*="offcanvas"]'),
-    ];
+  function observeElementorCart() {
+    var main = document.querySelector('.elementor-cart__main');
+    if (!main) { return; }
 
-    for (var i = 0; i < wrappers.length; i++) {
-      if (!wrappers[i]) { continue; }
-      (function (wrapper) {
-        var obs = new MutationObserver(function () {
-          var visible =
-            wrapper.classList.contains('show') ||
-            wrapper.classList.contains('active') ||
-            wrapper.classList.contains('is-open') ||
-            (wrapper.style.display !== '' && wrapper.style.display !== 'none') ||
-            wrapper.offsetParent !== null;
+    /* Watch the toggle button and parent widget for class/aria changes */
+    var widget = main.closest('[data-widget_type]') || main.parentElement;
+    var targets = [main, widget, document.body].filter(Boolean);
 
-          if (visible) {
-            setTimeout(fetchAndUpdate, 100);
-          }
-        });
-        obs.observe(wrapper, { attributes: true, attributeFilter: ['class', 'style'] });
-      })(wrappers[i]);
-    }
+    targets.forEach(function (target) {
+      new MutationObserver(function () {
+        /* Fire when the cart panel becomes visible */
+        if (main.offsetParent !== null || main.getBoundingClientRect().width > 0) {
+          fetchAndUpdate();
+        }
+      }).observe(target, { attributes: true, attributeFilter: ['class', 'style', 'aria-expanded'] });
+    });
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    /* Capture ajax url from PHP-rendered teaser */
+    /* Capture ajax url from any PHP-rendered teaser */
     var rendered = document.querySelector('.freeshipping-teaser[data-ajax-url]');
     if (rendered) { ajaxUrl = rendered.getAttribute('data-ajax-url'); }
 
@@ -163,15 +127,15 @@
       repositionCartPage();
     }
 
-    /* Watch mini cart wrapper for open/close */
-    observeMiniCart();
+    /* Watch Elementor sidebar cart for open event */
+    observeElementorCart();
 
     if (typeof prestashop === 'undefined' || typeof prestashop.on !== 'function') {
       return;
     }
 
     prestashop.on('updateCart', function () {
-      /* Remove stale mini teaser so injectOrUpdateMini re-detects the slot */
+      /* Remove stale mini teaser so the next fetchAndUpdate re-injects cleanly */
       var stale = document.querySelector('.fst-mini');
       if (stale) { stale.remove(); }
       setTimeout(fetchAndUpdate, 250);

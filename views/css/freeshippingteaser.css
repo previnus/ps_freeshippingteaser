@@ -47,9 +47,10 @@
     font-size: 13px;
 }
 
-/* Mini cart (add-to-cart modal) adjustments */
+/* Elementor sidebar cart / mini cart adjustments */
 .fst-mini {
-    margin: 0 0 10px;
+    margin: 8px 0;
     font-size: 12px;
     padding: 8px 12px;
+    border-radius: 4px;
 }
