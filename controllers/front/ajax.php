@@ -1,5 +1,4 @@
 <?php
-declare(strict_types=1);
 
 if (!defined('_PS_VERSION_')) {
     exit;
@@ -8,9 +7,6 @@ if (!defined('_PS_VERSION_')) {
 if (file_exists(dirname(__DIR__, 2) . '/vendor/autoload.php')) {
     require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 }
-
-use PrestaShop\Module\FreeShippingTeaser\TeaserBuilder;
-use PrestaShop\Module\FreeShippingTeaser\ThresholdFinder;
 
 class Ps_freeshippingteaserAjaxModuleFrontController extends ModuleFrontController
 {
@@ -31,7 +27,7 @@ class Ps_freeshippingteaserAjaxModuleFrontController extends ModuleFrontControll
             return;
         }
 
-        $finder    = new ThresholdFinder();
+        $finder    = new \PrestaShop\Module\FreeShippingTeaser\ThresholdFinder();
         $threshold = $finder->find();
 
         if ($threshold === null) {
@@ -44,7 +40,7 @@ class Ps_freeshippingteaserAjaxModuleFrontController extends ModuleFrontControll
         $currency  = $this->context->currency;
         $cartTotal = (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
 
-        $builder = new TeaserBuilder();
+        $builder = new \PrestaShop\Module\FreeShippingTeaser\TeaserBuilder();
         $data    = $builder->build(
             $threshold,
             $cartTotal,

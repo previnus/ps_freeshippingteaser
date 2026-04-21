@@ -1,5 +1,4 @@
 <?php
-declare(strict_types=1);
 
 if (!defined('_PS_VERSION_')) {
     exit;
@@ -8,9 +7,6 @@ if (!defined('_PS_VERSION_')) {
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';
 }
-
-use PrestaShop\Module\FreeShippingTeaser\TeaserBuilder;
-use PrestaShop\Module\FreeShippingTeaser\ThresholdFinder;
 
 class Ps_freeshippingteaser extends Module
 {
@@ -140,7 +136,7 @@ class Ps_freeshippingteaser extends Module
     }
 
     /** Tracks whether the mini-cart teaser has already been output this request. */
-    private bool $miniCartRendered = false;
+    private $miniCartRendered = false;
 
     public function hookDisplayHeader(): string
     {
@@ -188,7 +184,7 @@ class Ps_freeshippingteaser extends Module
 
     private function renderTeaser(): string
     {
-        $finder    = new ThresholdFinder();
+        $finder    = new \PrestaShop\Module\FreeShippingTeaser\ThresholdFinder();
         $threshold = $finder->find();
 
         if ($threshold === null) {
@@ -202,7 +198,7 @@ class Ps_freeshippingteaser extends Module
         $currency  = $this->context->currency;
         $cartTotal = (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
 
-        $builder = new TeaserBuilder();
+        $builder = new \PrestaShop\Module\FreeShippingTeaser\TeaserBuilder();
         $data    = $builder->build(
             $threshold,
             $cartTotal,
