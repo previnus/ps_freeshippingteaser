@@ -1,5 +1,10 @@
 {if isset($fst_ajax_url)}
-<div class="freeshipping-teaser" data-ajax-url="{$fst_ajax_url|escape:'html':'UTF-8'}">
+<div class="freeshipping-teaser"
+     data-ajax-url="{$fst_ajax_url|escape:'html':'UTF-8'}"
+     data-threshold="{$fst_threshold|floatval}"
+     data-currency="{$fst_currency|escape:'html':'UTF-8'}"
+     data-teaser-tpl="{$fst_teaser_tpl|escape:'html':'UTF-8'}"
+     data-success-tpl="{$fst_success_tpl|escape:'html':'UTF-8'}">
   {if $fst_qualified}
     <div class="fst-success">
       <span>{$fst_success_text|escape:'html':'UTF-8'}</span>

@@ -36,7 +36,7 @@ class Ps_freeshippingteaser extends Module
             && $this->installTab()
             && $this->registerHook('displayShoppingCartFooter')
             && $this->registerHook('displayBeforeCarrier')
-            && $this->registerHook('displayReassurance')
+
             && $this->registerHook('displayNav2Column')
             && $this->registerHook('displayTop')
             && $this->registerHook('displayHeader')
@@ -120,11 +120,6 @@ class Ps_freeshippingteaser extends Module
         return $this->renderTeaser();
     }
 
-    public function hookDisplayReassurance(array $params): string
-    {
-        return $this->renderTeaser();
-    }
-
     /**
      * Primary hook for the header mini-cart area.
      * If this fires, suppress hookDisplayTop so we don't double-render.
@@ -169,11 +164,15 @@ class Ps_freeshippingteaser extends Module
         );
 
         $this->context->smarty->assign([
-            'fst_qualified'    => $data['qualified'],
-            'fst_percent'      => $data['percent'],
-            'fst_teaser_text'  => $data['teaser_text'],
-            'fst_success_text' => $data['success_text'],
-            'fst_ajax_url'     => $this->context->link->getModuleLink($this->name, 'ajax'),
+            'fst_qualified'     => $data['qualified'],
+            'fst_percent'       => $data['percent'],
+            'fst_teaser_text'   => $data['teaser_text'],
+            'fst_success_text'  => $data['success_text'],
+            'fst_ajax_url'      => $this->context->link->getModuleLink($this->name, 'ajax'),
+            'fst_threshold'     => $threshold,
+            'fst_currency'      => $currency->sign,
+            'fst_teaser_tpl'    => (string) Configuration::get('FST_TEASER_TEXT'),
+            'fst_success_tpl'   => (string) Configuration::get('FST_SUCCESS_TEXT'),
         ]);
 
         return $this->display(__FILE__, 'views/templates/hook/teaser.tpl');

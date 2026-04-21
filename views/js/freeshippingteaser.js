@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var ajaxUrl = null;
+  /* ── Helpers ─────────────────────────────────────────────── */
 
   function escapeHtml(str) {
     var div = document.createElement('div');
@@ -9,32 +9,123 @@
     return div.innerHTML;
   }
 
-  function buildInnerHtml(data) {
-    if (!data || !data.threshold) { return ''; }
-    if (data.qualified) {
+  function formatMoney(sign, amount) {
+    return sign + amount.toFixed(2);
+  }
+
+  function replaceTokens(tpl, remaining, threshold, sign) {
+    return tpl
+      .replace('{amount}',    formatMoney(sign, remaining))
+      .replace('{threshold}', formatMoney(sign, threshold))
+      .replace('{currency}',  sign);
+  }
+
+  /* Build inner HTML purely from local data — no HTTP request */
+  function buildHtmlLocal(threshold, cartTotal, currency, teaserTpl, successTpl) {
+    if (!threshold) { return ''; }
+    var qualified  = cartTotal >= threshold;
+    var remaining  = qualified ? 0 : Math.round((threshold - cartTotal) * 100) / 100;
+    var percent    = Math.min(100, Math.floor((cartTotal / threshold) * 100));
+    var barClass   = percent >= 100 ? 'fst-bar fst-bar--complete' : 'fst-bar';
+
+    if (qualified) {
       return (
-        '<div class="fst-success">' +
-          '<span>' + escapeHtml(data.success_text) + '</span>' +
-        '</div>'
+        '<div class="fst-success"><span>' +
+          escapeHtml(replaceTokens(successTpl, remaining, threshold, currency)) +
+        '</span></div>'
       );
     }
-    var barClass = data.percent >= 100 ? 'fst-bar fst-bar--complete' : 'fst-bar';
     return (
       '<div class="fst-bar-wrap">' +
-        '<div class="' + barClass + '" style="width:' + data.percent + '%"></div>' +
+        '<div class="' + barClass + '" style="width:' + percent + '%"></div>' +
       '</div>' +
-      '<p class="fst-message">' + escapeHtml(data.teaser_text) + '</p>'
+      '<p class="fst-message">' +
+        escapeHtml(replaceTokens(teaserTpl, remaining, threshold, currency)) +
+      '</p>'
     );
   }
 
-  function getAjaxUrl() {
-    if (ajaxUrl) { return ajaxUrl; }
-    var el = document.querySelector('.freeshipping-teaser[data-ajax-url]');
-    if (el) { ajaxUrl = el.getAttribute('data-ajax-url'); }
-    return ajaxUrl;
+  /* Read config embedded by PHP in data attributes */
+  function getConfig() {
+    var el = document.querySelector('.freeshipping-teaser[data-threshold]');
+    if (!el) { return null; }
+    return {
+      ajaxUrl:    el.getAttribute('data-ajax-url')    || '',
+      threshold:  parseFloat(el.getAttribute('data-threshold'))  || 0,
+      currency:   el.getAttribute('data-currency')    || '',
+      teaserTpl:  el.getAttribute('data-teaser-tpl')  || '',
+      successTpl: el.getAttribute('data-success-tpl') || '',
+    };
   }
 
-  /* --- Cart page: move rendered teaser above the items list --- */
+  /* ── Cart-total extraction from PS updateCart event ─────── */
+
+  function cartTotalFromEvent(event) {
+    try {
+      var cart = event && event.resp && event.resp.cart;
+      if (!cart) { return null; }
+      /* PS9 Classic: subtotals.products.amount */
+      if (cart.subtotals && cart.subtotals.products) {
+        var v = parseFloat(cart.subtotals.products.amount);
+        if (!isNaN(v)) { return v; }
+      }
+      /* Fallback: totals.total_excluding_tax */
+      if (cart.totals && cart.totals.total_excluding_tax) {
+        var v2 = parseFloat(cart.totals.total_excluding_tax.amount);
+        if (!isNaN(v2)) { return v2; }
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  /* ── DOM update helpers ──────────────────────────────────── */
+
+  function updateAllTeasers(html) {
+    document.querySelectorAll('.freeshipping-teaser').forEach(function (el) {
+      el.innerHTML = html;
+    });
+  }
+
+  function injectOrUpdateElementorCart(html) {
+    var existing = document.querySelector('.elementor-cart__main .fst-mini');
+    if (existing) { existing.innerHTML = html; return; }
+
+    var summary = document.querySelector('.elementor-cart__summary');
+    if (!summary) { return; }
+
+    var mini = document.createElement('div');
+    mini.className = 'freeshipping-teaser fst-mini';
+    var cfg = getConfig();
+    if (cfg) { mini.setAttribute('data-ajax-url', cfg.ajaxUrl); }
+    mini.innerHTML = html;
+    summary.insertAdjacentElement('beforebegin', mini);
+  }
+
+  /* ── AJAX fetch (only used when Elementor drawer opens) ──── */
+
+  function fetchAndUpdate(cfg) {
+    if (!cfg || !cfg.ajaxUrl) { return; }
+    if (typeof prestashop === 'undefined' || !prestashop.static_token) { return; }
+
+    var fd = new FormData();
+    fd.append('token', prestashop.static_token);
+
+    fetch(cfg.ajaxUrl, { method: 'POST', body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.threshold) { return; }
+        var html = buildHtmlLocal(
+          data.threshold, data.cart_total,
+          cfg.currency, cfg.teaserTpl, cfg.successTpl
+        );
+        updateAllTeasers(html);
+        injectOrUpdateElementorCart(html);
+      })
+      .catch(function () { /* non-critical */ });
+  }
+
+  /* ── Cart-page repositioning ─────────────────────────────── */
+
   function repositionCartPage() {
     var teaser = document.querySelector('.freeshipping-teaser');
     if (!teaser) { return; }
@@ -44,64 +135,13 @@
     }
   }
 
-  /*
-   * Inject or update the teaser inside the Elementor sidebar cart.
-   * Target: between .elementor-cart__products and .elementor-cart__summary.
-   */
-  function injectOrUpdateElementorCart(innerHtml) {
-    var existing = document.querySelector('.elementor-cart__main .fst-mini');
-    if (existing) {
-      existing.innerHTML = innerHtml;
-      return;
-    }
+  /* ── Elementor drawer observer ───────────────────────────── */
 
-    /* Insert before the totals summary block */
-    var summary = document.querySelector('.elementor-cart__summary');
-    if (!summary) { return; }
-
-    var mini = document.createElement('div');
-    mini.className = 'freeshipping-teaser fst-mini';
-    var url = getAjaxUrl();
-    if (url) { mini.setAttribute('data-ajax-url', url); }
-    mini.innerHTML = innerHtml;
-    summary.insertAdjacentElement('beforebegin', mini);
-  }
-
-  /* --- Fetch fresh data and push to all teaser containers --- */
-  function fetchAndUpdate() {
-    var url = getAjaxUrl();
-    if (!url) { return; }
-    if (typeof prestashop === 'undefined' || !prestashop.static_token) { return; }
-
-    var fd = new FormData();
-    fd.append('token', prestashop.static_token);
-
-    fetch(url, { method: 'POST', body: fd })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var html = buildInnerHtml(data);
-
-        /* Update every server-rendered teaser on the page */
-        document.querySelectorAll('.freeshipping-teaser').forEach(function (el) {
-          el.innerHTML = html;
-        });
-
-        /* Elementor sidebar cart */
-        injectOrUpdateElementorCart(html);
-      })
-      .catch(function () { /* non-critical */ });
-  }
-
-  /*
-   * Elementor cart drawer: watch only the widget wrapper (not body) for the
-   * open-state class toggle. A debounce flag prevents re-entry when our own
-   * DOM injection triggers the observer.
-   */
-  function observeElementorCart() {
+  function observeElementorCart(cfg) {
     var main = document.querySelector('.elementor-cart__main');
     if (!main) { return; }
 
-    var widget = main.closest('[data-widget_type]') || main.parentElement;
+    var widget   = main.closest('[data-widget_type]') || main.parentElement;
     if (!widget) { return; }
 
     var pending = false;
@@ -113,42 +153,48 @@
                    widget.classList.contains('elementor--shown') ||
                    main.offsetParent !== null;
 
-      /* Only fire on the transition from closed → open */
       if (isOpen && !wasOpen) {
         wasOpen = true;
         pending = true;
-        setTimeout(function () {
-          fetchAndUpdate();
-          pending = false;
-        }, 200);
+        setTimeout(function () { fetchAndUpdate(cfg); pending = false; }, 200);
       } else if (!isOpen) {
         wasOpen = false;
       }
     }).observe(widget, { attributes: true, attributeFilter: ['class', 'style'] });
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    /* Capture ajax url from any PHP-rendered teaser */
-    var rendered = document.querySelector('.freeshipping-teaser[data-ajax-url]');
-    if (rendered) { ajaxUrl = rendered.getAttribute('data-ajax-url'); }
+  /* ── Boot ────────────────────────────────────────────────── */
 
-    /* Reposition on full cart page */
+  document.addEventListener('DOMContentLoaded', function () {
+    var cfg = getConfig();
+
     if (document.querySelector('.cart-items, .cart-overview')) {
       repositionCartPage();
     }
 
-    /* Watch Elementor sidebar cart for open event */
-    observeElementorCart();
+    observeElementorCart(cfg);
 
     if (typeof prestashop === 'undefined' || typeof prestashop.on !== 'function') {
       return;
     }
 
-    prestashop.on('updateCart', function () {
-      /* Remove stale mini teaser so the next fetchAndUpdate re-injects cleanly */
+    prestashop.on('updateCart', function (event) {
+      if (!cfg) { return; }
+
+      /* Remove stale mini teaser — will be re-injected below */
       var stale = document.querySelector('.fst-mini');
       if (stale) { stale.remove(); }
-      setTimeout(fetchAndUpdate, 250);
+
+      /* Get the new cart total from PS event data (no extra HTTP request) */
+      var cartTotal = cartTotalFromEvent(event);
+      if (cartTotal === null) { return; }
+
+      var html = buildHtmlLocal(
+        cfg.threshold, cartTotal,
+        cfg.currency, cfg.teaserTpl, cfg.successTpl
+      );
+      updateAllTeasers(html);
+      injectOrUpdateElementorCart(html);
     });
   });
 }());
