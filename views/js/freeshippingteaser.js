@@ -93,28 +93,38 @@
   }
 
   /*
-   * Elementor cart drawer: watch the parent widget element for the
-   * open state. Elementor toggles aria-expanded / a class on the
-   * toggle button and animates the panel via the .elementor-cart__main
-   * wrapper's grandparent. We observe body-level class changes and
-   * the cart main element's own attribute changes to catch it opening.
+   * Elementor cart drawer: watch only the widget wrapper (not body) for the
+   * open-state class toggle. A debounce flag prevents re-entry when our own
+   * DOM injection triggers the observer.
    */
   function observeElementorCart() {
     var main = document.querySelector('.elementor-cart__main');
     if (!main) { return; }
 
-    /* Watch the toggle button and parent widget for class/aria changes */
     var widget = main.closest('[data-widget_type]') || main.parentElement;
-    var targets = [main, widget, document.body].filter(Boolean);
+    if (!widget) { return; }
 
-    targets.forEach(function (target) {
-      new MutationObserver(function () {
-        /* Fire when the cart panel becomes visible */
-        if (main.offsetParent !== null || main.getBoundingClientRect().width > 0) {
+    var pending = false;
+    var wasOpen = false;
+
+    new MutationObserver(function () {
+      if (pending) { return; }
+      var isOpen = widget.classList.contains('elementor-cart--shown') ||
+                   widget.classList.contains('elementor--shown') ||
+                   main.offsetParent !== null;
+
+      /* Only fire on the transition from closed → open */
+      if (isOpen && !wasOpen) {
+        wasOpen = true;
+        pending = true;
+        setTimeout(function () {
           fetchAndUpdate();
-        }
-      }).observe(target, { attributes: true, attributeFilter: ['class', 'style', 'aria-expanded'] });
-    });
+          pending = false;
+        }, 200);
+      } else if (!isOpen) {
+        wasOpen = false;
+      }
+    }).observe(widget, { attributes: true, attributeFilter: ['class', 'style'] });
   }
 
   document.addEventListener('DOMContentLoaded', function () {
