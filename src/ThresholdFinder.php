@@ -45,6 +45,7 @@ class ThresholdFinder
         $sql->where('cr.free_shipping = 1');
         $sql->where('cr.minimum_amount > 0');
         $sql->where('cr.quantity > 0');
+        $sql->where('(cr.date_from IS NULL OR cr.date_from <= NOW())');
         $sql->where('(cr.date_to IS NULL OR cr.date_to >= NOW())');
 
         $result = \Db::getInstance()->getValue($sql);

@@ -13,11 +13,15 @@
     return sign + amount.toFixed(2);
   }
 
+  function replaceAll(str, token, value) {
+    return str.split(token).join(value);
+  }
+
   function replaceTokens(tpl, remaining, threshold, sign) {
-    return tpl
-      .replace('{amount}',    formatMoney(sign, remaining))
-      .replace('{threshold}', formatMoney(sign, threshold))
-      .replace('{currency}',  sign);
+    tpl = replaceAll(tpl, '{amount}',    formatMoney(sign, remaining));
+    tpl = replaceAll(tpl, '{threshold}', formatMoney(sign, threshold));
+    tpl = replaceAll(tpl, '{currency}',  sign);
+    return tpl;
   }
 
   /* Build inner HTML purely from local data — no HTTP request */
@@ -80,8 +84,9 @@
 
   /* ── DOM update helpers ──────────────────────────────────── */
 
+  /* Excludes .fst-mini — handled separately by injectOrUpdateElementorCart */
   function updateAllTeasers(html) {
-    document.querySelectorAll('.freeshipping-teaser').forEach(function (el) {
+    document.querySelectorAll('.freeshipping-teaser:not(.fst-mini)').forEach(function (el) {
       el.innerHTML = html;
     });
   }
@@ -151,7 +156,7 @@
       if (pending) { return; }
       var isOpen = widget.classList.contains('elementor-cart--shown') ||
                    widget.classList.contains('elementor--shown') ||
-                   main.offsetParent !== null;
+                   main.classList.contains('elementor-cart--shown');
 
       if (isOpen && !wasOpen) {
         wasOpen = true;

@@ -94,8 +94,20 @@ class Ps_freeshippingteaser extends Module
         return true;
     }
 
-    /** Tracks whether the mini-cart teaser has already been output this request. */
     private bool $miniCartRendered = false;
+
+    /** Request-scoped threshold cache — avoids repeated DB queries across hook calls. */
+    private bool  $thresholdLoaded  = false;
+    private ?float $cachedThreshold = null;
+
+    private function getThreshold(): ?float
+    {
+        if (!$this->thresholdLoaded) {
+            $this->cachedThreshold = (new ThresholdFinder())->find();
+            $this->thresholdLoaded = true;
+        }
+        return $this->cachedThreshold;
+    }
 
     public function hookDisplayHeader(): string
     {
@@ -143,36 +155,37 @@ class Ps_freeshippingteaser extends Module
 
     private function renderTeaser(): string
     {
-        $finder    = new ThresholdFinder();
-        $threshold = $finder->find();
+        $threshold = $this->getThreshold();
 
         if ($threshold === null) {
             return '';
         }
 
-        $cart      = $this->context->cart;
-        $currency  = $this->context->currency;
-        $cartTotal = ($cart !== null) ? (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS) : 0.0;
+        $cart         = $this->context->cart;
+        $currency     = $this->context->currency;
+        $currencySign = ($currency !== null) ? $currency->sign : '';
+        $cartTotal    = ($cart !== null) ? (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS) : 0.0;
+        $teaserText   = (string) Configuration::get('FST_TEASER_TEXT');
+        $successText  = (string) Configuration::get('FST_SUCCESS_TEXT');
 
-        $builder = new TeaserBuilder();
-        $data    = $builder->build(
+        $data = (new TeaserBuilder())->build(
             $threshold,
             $cartTotal,
-            $currency->sign,
-            (string) Configuration::get('FST_TEASER_TEXT'),
-            (string) Configuration::get('FST_SUCCESS_TEXT')
+            $currencySign,
+            $teaserText,
+            $successText
         );
 
         $this->context->smarty->assign([
-            'fst_qualified'     => $data['qualified'],
-            'fst_percent'       => $data['percent'],
-            'fst_teaser_text'   => $data['teaser_text'],
-            'fst_success_text'  => $data['success_text'],
-            'fst_ajax_url'      => $this->context->link->getModuleLink($this->name, 'ajax'),
-            'fst_threshold'     => $threshold,
-            'fst_currency'      => $currency->sign,
-            'fst_teaser_tpl'    => (string) Configuration::get('FST_TEASER_TEXT'),
-            'fst_success_tpl'   => (string) Configuration::get('FST_SUCCESS_TEXT'),
+            'fst_qualified'    => $data['qualified'],
+            'fst_percent'      => $data['percent'],
+            'fst_teaser_text'  => $data['teaser_text'],
+            'fst_success_text' => $data['success_text'],
+            'fst_ajax_url'     => $this->context->link->getModuleLink($this->name, 'ajax'),
+            'fst_threshold'    => $threshold,
+            'fst_currency'     => $currencySign,
+            'fst_teaser_tpl'   => $teaserText,
+            'fst_success_tpl'  => $successText,
         ]);
 
         return $this->display(__FILE__, 'views/templates/hook/teaser.tpl');

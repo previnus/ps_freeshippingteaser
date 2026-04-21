@@ -40,7 +40,11 @@ class Ps_freeshippingteaserAjaxModuleFrontController extends ModuleFrontControll
             return;
         }
 
-        $cart      = $this->context->cart;
+        $cart = $this->context->cart;
+        if ($cart === null) {
+            $this->ajaxRender(json_encode(['threshold' => null]));
+            return;
+        }
         $currency  = $this->context->currency;
         $cartTotal = (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
 
