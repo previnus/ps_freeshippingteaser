@@ -57,4 +57,85 @@ class Ps_freeshippingteaser extends Module
             && Configuration::deleteByName('FST_TEASER_TEXT')
             && Configuration::deleteByName('FST_SUCCESS_TEXT');
     }
+
+    public function getContent(): string
+    {
+        $output = '';
+
+        if (Tools::isSubmit('submitFSTModule')) {
+            Configuration::updateValue(
+                'FST_FREE_SHIPPING_AMOUNT',
+                (float) Tools::getValue('FST_FREE_SHIPPING_AMOUNT')
+            );
+            Configuration::updateValue(
+                'FST_TEASER_TEXT',
+                pSQL(Tools::getValue('FST_TEASER_TEXT'))
+            );
+            Configuration::updateValue(
+                'FST_SUCCESS_TEXT',
+                pSQL(Tools::getValue('FST_SUCCESS_TEXT'))
+            );
+            $output .= $this->displayConfirmation($this->l('Settings updated.'));
+        }
+
+        return $output . $this->renderForm();
+    }
+
+    private function renderForm(): string
+    {
+        $helper                        = new HelperForm();
+        $helper->table                 = $this->table;
+        $helper->name_controller       = $this->name;
+        $helper->token                 = Tools::getAdminTokenLite('AdminModules');
+        $helper->currentIndex          = AdminController::$currentIndex . '&configure=' . $this->name;
+        $helper->submit_action         = 'submitFSTModule';
+        $helper->default_form_language = (int) $this->context->language->id;
+        $helper->fields_value          = [
+            'FST_FREE_SHIPPING_AMOUNT' => Tools::getValue(
+                'FST_FREE_SHIPPING_AMOUNT',
+                Configuration::get('FST_FREE_SHIPPING_AMOUNT')
+            ),
+            'FST_TEASER_TEXT'  => Tools::getValue(
+                'FST_TEASER_TEXT',
+                Configuration::get('FST_TEASER_TEXT')
+            ),
+            'FST_SUCCESS_TEXT' => Tools::getValue(
+                'FST_SUCCESS_TEXT',
+                Configuration::get('FST_SUCCESS_TEXT')
+            ),
+        ];
+
+        return $helper->generateForm([[
+            'form' => [
+                'legend' => [
+                    'title' => $this->l('Settings'),
+                    'icon'  => 'icon-cogs',
+                ],
+                'input' => [
+                    [
+                        'type'  => 'text',
+                        'label' => $this->l('Free shipping amount'),
+                        'name'  => 'FST_FREE_SHIPPING_AMOUNT',
+                        'desc'  => $this->l('Set to 0 to auto-detect from carrier price ranges.'),
+                        'size'  => 20,
+                    ],
+                    [
+                        'type'  => 'text',
+                        'label' => $this->l('Teaser text'),
+                        'name'  => 'FST_TEASER_TEXT',
+                        'desc'  => $this->l('Tokens: {amount}, {threshold}, {currency}'),
+                        'size'  => 80,
+                    ],
+                    [
+                        'type'  => 'text',
+                        'label' => $this->l('Success text'),
+                        'name'  => 'FST_SUCCESS_TEXT',
+                        'desc'  => $this->l('Tokens: {amount}, {threshold}, {currency}'),
+                        'size'  => 80,
+                    ],
+                ],
+                'submit' => ['title' => $this->l('Save')],
+            ],
+        ]]);
+    }
 }
