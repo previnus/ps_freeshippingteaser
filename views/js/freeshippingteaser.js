@@ -142,11 +142,29 @@
 
   /* ── Elementor drawer observer ───────────────────────────── */
 
+  function isElementorCartOpen(widget, main) {
+    if (widget.classList.contains('elementor-cart--shown') ||
+        widget.classList.contains('elementor--shown') ||
+        main.classList.contains('elementor-cart--shown')) {
+      return true;
+    }
+    /* aria-expanded="true" pattern */
+    var toggle = widget.querySelector('[aria-expanded="true"]');
+    if (toggle) { return true; }
+    /* style.display !== 'none' on the inner panel */
+    var panel = widget.querySelector('.elementor-cart__main, .elementor-cart--is-active');
+    if (panel) {
+      var s = window.getComputedStyle(panel);
+      if (s.display !== 'none' && s.visibility !== 'hidden') { return true; }
+    }
+    return false;
+  }
+
   function observeElementorCart(cfg) {
     var main = document.querySelector('.elementor-cart__main');
     if (!main) { return; }
 
-    var widget   = main.closest('[data-widget_type]') || main.parentElement;
+    var widget = main.closest('[data-widget_type]') || main.parentElement;
     if (!widget) { return; }
 
     var pending = false;
@@ -154,9 +172,7 @@
 
     new MutationObserver(function () {
       if (pending) { return; }
-      var isOpen = widget.classList.contains('elementor-cart--shown') ||
-                   widget.classList.contains('elementor--shown') ||
-                   main.classList.contains('elementor-cart--shown');
+      var isOpen = isElementorCartOpen(widget, main);
 
       if (isOpen && !wasOpen) {
         wasOpen = true;
@@ -165,7 +181,7 @@
       } else if (!isOpen) {
         wasOpen = false;
       }
-    }).observe(widget, { attributes: true, attributeFilter: ['class', 'style'] });
+    }).observe(widget, { attributes: true, subtree: true, attributeFilter: ['class', 'style', 'aria-expanded'] });
   }
 
   /* ── Boot ────────────────────────────────────────────────── */
@@ -190,16 +206,19 @@
       var stale = document.querySelector('.fst-mini');
       if (stale) { stale.remove(); }
 
-      /* Get the new cart total from PS event data (no extra HTTP request) */
+      /* Try client-side calculation first (no HTTP round-trip) */
       var cartTotal = cartTotalFromEvent(event);
-      if (cartTotal === null) { return; }
-
-      var html = buildHtmlLocal(
-        cfg.threshold, cartTotal,
-        cfg.currency, cfg.teaserTpl, cfg.successTpl
-      );
-      updateAllTeasers(html);
-      injectOrUpdateElementorCart(html);
+      if (cartTotal !== null) {
+        var html = buildHtmlLocal(
+          cfg.threshold, cartTotal,
+          cfg.currency, cfg.teaserTpl, cfg.successTpl
+        );
+        updateAllTeasers(html);
+        injectOrUpdateElementorCart(html);
+      } else {
+        /* PS event didn't carry cart data — fall back to AJAX */
+        fetchAndUpdate(cfg);
+      }
     });
   });
 }());

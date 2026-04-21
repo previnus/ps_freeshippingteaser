@@ -45,14 +45,15 @@ class Ps_freeshippingteaserAjaxModuleFrontController extends ModuleFrontControll
             $this->ajaxRender(json_encode(['threshold' => null]));
             return;
         }
-        $currency  = $this->context->currency;
-        $cartTotal = (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
+        $currency     = $this->context->currency;
+        $currencySign = ($currency !== null) ? $currency->sign : '';
+        $cartTotal    = (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
 
         $builder = new TeaserBuilder();
         $data    = $builder->build(
             $threshold,
             $cartTotal,
-            $currency->sign,
+            $currencySign,
             (string) Configuration::get('FST_TEASER_TEXT'),
             (string) Configuration::get('FST_SUCCESS_TEXT')
         );
