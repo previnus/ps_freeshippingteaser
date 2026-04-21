@@ -12,7 +12,7 @@ class ThresholdFinder
             return $override;
         }
 
-        return $this->findFromCarrierRules();
+        return $this->findFromCarrierRules() ?? $this->findFromCartRules();
     }
 
     private function findFromCarrierRules(): ?float
@@ -30,6 +30,22 @@ class ThresholdFinder
         $sql->where('c.deleted = 0');
         $sql->where('d.price = 0');
         $sql->where('rp.delimiter1 > 0');
+
+        $result = \Db::getInstance()->getValue($sql);
+
+        return ($result !== false && $result > 0) ? (float) $result : null;
+    }
+
+    private function findFromCartRules(): ?float
+    {
+        $sql = new \DbQuery();
+        $sql->select('MIN(cr.minimum_amount)');
+        $sql->from('cart_rule', 'cr');
+        $sql->where('cr.active = 1');
+        $sql->where('cr.free_shipping = 1');
+        $sql->where('cr.minimum_amount > 0');
+        $sql->where('cr.quantity > 0');
+        $sql->where('(cr.date_to IS NULL OR cr.date_to >= NOW())');
 
         $result = \Db::getInstance()->getValue($sql);
 

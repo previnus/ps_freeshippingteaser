@@ -1,12 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-if (file_exists(__DIR__ . '/vendor/autoload.php')) {
-    require_once __DIR__ . '/vendor/autoload.php';
-}
+require_once __DIR__ . '/src/TeaserBuilder.php';
+require_once __DIR__ . '/src/ThresholdFinder.php';
+
+use PrestaShop\Module\FreeShippingTeaser\ThresholdFinder;
+use PrestaShop\Module\FreeShippingTeaser\TeaserBuilder;
 
 class Ps_freeshippingteaser extends Module
 {
@@ -15,7 +19,7 @@ class Ps_freeshippingteaser extends Module
         $this->name          = 'ps_freeshippingteaser';
         $this->tab           = 'front_office_features';
         $this->version       = '1.0.0';
-        $this->author        = 'Your Name';
+        $this->author        = 'Previn Kalisetty Appadu';
         $this->need_instance = 0;
         $this->bootstrap     = true;
 
@@ -23,14 +27,16 @@ class Ps_freeshippingteaser extends Module
 
         $this->displayName = $this->l('Free Shipping Teaser');
         $this->description = $this->l('Displays a real-time free shipping progress teaser in cart areas.');
-        $this->ps_versions_compliancy = ['min' => '8.0.0', 'max' => _PS_VERSION_];
+        $this->ps_versions_compliancy = ['min' => '9.0.0', 'max' => '9.99.99'];
     }
 
     public function install(): bool
     {
         return parent::install()
+            && $this->installTab()
             && $this->registerHook('displayShoppingCartFooter')
             && $this->registerHook('displayBeforeCarrier')
+            && $this->registerHook('displayReassurance')
             && $this->registerHook('displayNav2Column')
             && $this->registerHook('displayTop')
             && $this->registerHook('displayHeader')
@@ -48,95 +54,48 @@ class Ps_freeshippingteaser extends Module
 
     public function uninstall(): bool
     {
-        return parent::uninstall()
+        return $this->uninstallTab()
+            && parent::uninstall()
             && Configuration::deleteByName('FST_FREE_SHIPPING_AMOUNT')
             && Configuration::deleteByName('FST_TEASER_TEXT')
             && Configuration::deleteByName('FST_SUCCESS_TEXT');
     }
 
-    public function getContent(): string
+    private function installTab(): bool
     {
-        $output = '';
-
-        if (Tools::isSubmit('submitFSTModule')) {
-            Configuration::updateValue(
-                'FST_FREE_SHIPPING_AMOUNT',
-                (float) Tools::getValue('FST_FREE_SHIPPING_AMOUNT')
-            );
-            Configuration::updateValue(
-                'FST_TEASER_TEXT',
-                Tools::getValue('FST_TEASER_TEXT')
-            );
-            Configuration::updateValue(
-                'FST_SUCCESS_TEXT',
-                Tools::getValue('FST_SUCCESS_TEXT')
-            );
-            $output .= $this->displayConfirmation($this->l('Settings updated.'));
+        $parentId = (int) Tab::getIdFromClassName('AdminParentModulesSf');
+        if (!$parentId) {
+            $parentId = 0;
         }
 
-        return $output . $this->renderForm();
+        $tab             = new Tab();
+        $tab->class_name = 'AdminPsFreeShippingTeaser';
+        $tab->module     = $this->name;
+        $tab->id_parent  = $parentId;
+        $tab->active     = 1;
+        $tab->icon       = 'local_shipping';
+        $tab->name       = [];
+
+        foreach (Language::getLanguages(true) as $lang) {
+            $tab->name[$lang['id_lang']] = 'Free Shipping Teaser';
+        }
+
+        return (bool) $tab->add();
     }
 
-    private function renderForm(): string
+    private function uninstallTab(): bool
     {
-        $helper                        = new HelperForm();
-        $helper->table                 = $this->table;
-        $helper->name_controller       = $this->name;
-        $helper->token                 = Tools::getAdminTokenLite('AdminModules');
-        $helper->currentIndex          = AdminController::$currentIndex . '&configure=' . $this->name;
-        $helper->submit_action         = 'submitFSTModule';
-        $helper->default_form_language = (int) $this->context->language->id;
-        $helper->fields_value          = [
-            'FST_FREE_SHIPPING_AMOUNT' => Tools::getValue(
-                'FST_FREE_SHIPPING_AMOUNT',
-                Configuration::get('FST_FREE_SHIPPING_AMOUNT')
-            ),
-            'FST_TEASER_TEXT'  => Tools::getValue(
-                'FST_TEASER_TEXT',
-                Configuration::get('FST_TEASER_TEXT')
-            ),
-            'FST_SUCCESS_TEXT' => Tools::getValue(
-                'FST_SUCCESS_TEXT',
-                Configuration::get('FST_SUCCESS_TEXT')
-            ),
-        ];
+        $tabId = (int) Tab::getIdFromClassName('AdminPsFreeShippingTeaser');
+        if ($tabId) {
+            $tab = new Tab($tabId);
+            return (bool) $tab->delete();
+        }
 
-        return $helper->generateForm([[
-            'form' => [
-                'legend' => [
-                    'title' => $this->l('Settings'),
-                    'icon'  => 'icon-cogs',
-                ],
-                'input' => [
-                    [
-                        'type'  => 'text',
-                        'label' => $this->l('Free shipping amount'),
-                        'name'  => 'FST_FREE_SHIPPING_AMOUNT',
-                        'desc'  => $this->l('Set to 0 to auto-detect from carrier price ranges.'),
-                        'size'  => 20,
-                    ],
-                    [
-                        'type'  => 'text',
-                        'label' => $this->l('Teaser text'),
-                        'name'  => 'FST_TEASER_TEXT',
-                        'desc'  => $this->l('Tokens: {amount}, {threshold}, {currency}'),
-                        'size'  => 80,
-                    ],
-                    [
-                        'type'  => 'text',
-                        'label' => $this->l('Success text'),
-                        'name'  => 'FST_SUCCESS_TEXT',
-                        'desc'  => $this->l('Tokens: {amount}, {threshold}, {currency}'),
-                        'size'  => 80,
-                    ],
-                ],
-                'submit' => ['title' => $this->l('Save')],
-            ],
-        ]]);
+        return true;
     }
 
     /** Tracks whether the mini-cart teaser has already been output this request. */
-    private $miniCartRendered = false;
+    private bool $miniCartRendered = false;
 
     public function hookDisplayHeader(): string
     {
@@ -157,6 +116,11 @@ class Ps_freeshippingteaser extends Module
     }
 
     public function hookDisplayBeforeCarrier(array $params): string
+    {
+        return $this->renderTeaser();
+    }
+
+    public function hookDisplayReassurance(array $params): string
     {
         return $this->renderTeaser();
     }
@@ -184,21 +148,18 @@ class Ps_freeshippingteaser extends Module
 
     private function renderTeaser(): string
     {
-        $finder    = new \PrestaShop\Module\FreeShippingTeaser\ThresholdFinder();
+        $finder    = new ThresholdFinder();
         $threshold = $finder->find();
 
         if ($threshold === null) {
             return '';
         }
 
-        $cart = $this->context->cart;
-        if ($cart === null) {
-            return '';
-        }
+        $cart      = $this->context->cart;
         $currency  = $this->context->currency;
-        $cartTotal = (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
+        $cartTotal = ($cart !== null) ? (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS) : 0.0;
 
-        $builder = new \PrestaShop\Module\FreeShippingTeaser\TeaserBuilder();
+        $builder = new TeaserBuilder();
         $data    = $builder->build(
             $threshold,
             $cartTotal,
