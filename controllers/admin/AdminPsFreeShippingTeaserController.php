@@ -14,6 +14,20 @@ class AdminPsFreeShippingTeaserController extends ModuleAdminController
         $this->bootstrap = true;
     }
 
+    /**
+     * PS9 removed l() from ModuleAdminController's inheritance chain.
+     * This shim restores it: delegates to the module instance when available,
+     * otherwise returns the raw string (English fallback).
+     */
+    public function l(string $string, ?string $class = null, bool $addslashes = false, bool $htmlentities = true): string
+    {
+        if (isset($this->module) && $this->module instanceof Module) {
+            return $this->module->l($string, $class ?? static::class);
+        }
+
+        return $string;
+    }
+
     public function postProcess(): void
     {
         if (Tools::isSubmit('submitFSTModule')) {
