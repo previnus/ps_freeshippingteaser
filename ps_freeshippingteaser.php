@@ -153,6 +153,24 @@ class Ps_freeshippingteaser extends Module
         return $this->renderTeaser();
     }
 
+    /**
+     * Returns true when the current customer group displays prices including tax.
+     * Used to decide whether the JS can compute the ex-tax product total client-side.
+     */
+    private function isPricesIncTax(): bool
+    {
+        if (!(bool) Configuration::get('PS_TAX')) {
+            return false;
+        }
+        try {
+            $group         = Group::getCurrent();
+            $displayMethod = (int) Group::getPriceDisplayMethod((int) $group->id);
+            return $displayMethod !== 0; // 0 = PS_TAX_EXC (ex-tax display)
+        } catch (\Throwable $e) {
+            return true; // assume inc-tax on error — forces AJAX path in JS
+        }
+    }
+
     private function renderTeaser(): string
     {
         $threshold = $this->getThreshold();
@@ -164,7 +182,8 @@ class Ps_freeshippingteaser extends Module
         $cart         = $this->context->cart;
         $currency     = $this->context->currency;
         $currencySign = ($currency !== null) ? $currency->sign : '';
-        $cartTotal    = ($cart !== null) ? (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS) : 0.0;
+        // Use ex-tax product subtotal so the threshold comparison is tax-exclusive.
+        $cartTotal    = ($cart !== null) ? (float) $cart->getOrderTotal(false, Cart::ONLY_PRODUCTS) : 0.0;
         $teaserText   = (string) Configuration::get('FST_TEASER_TEXT');
         $successText  = (string) Configuration::get('FST_SUCCESS_TEXT');
 
@@ -177,15 +196,16 @@ class Ps_freeshippingteaser extends Module
         );
 
         $this->context->smarty->assign([
-            'fst_qualified'    => $data['qualified'],
-            'fst_percent'      => $data['percent'],
-            'fst_teaser_text'  => $data['teaser_text'],
-            'fst_success_text' => $data['success_text'],
-            'fst_ajax_url'     => $this->context->link->getModuleLink($this->name, 'ajax'),
-            'fst_threshold'    => $threshold,
-            'fst_currency'     => $currencySign,
-            'fst_teaser_tpl'   => $teaserText,
-            'fst_success_tpl'  => $successText,
+            'fst_qualified'      => $data['qualified'],
+            'fst_percent'        => $data['percent'],
+            'fst_teaser_text'    => $data['teaser_text'],
+            'fst_success_text'   => $data['success_text'],
+            'fst_ajax_url'       => $this->context->link->getModuleLink($this->name, 'ajax'),
+            'fst_threshold'      => $threshold,
+            'fst_currency'       => $currencySign,
+            'fst_teaser_tpl'     => $teaserText,
+            'fst_success_tpl'    => $successText,
+            'fst_prices_inc_tax' => $this->isPricesIncTax(),
         ]);
 
         return $this->display(__FILE__, 'views/templates/hook/teaser.tpl');

@@ -54,11 +54,16 @@
     var el = document.querySelector('.freeshipping-teaser[data-threshold]');
     if (!el) { return null; }
     return {
-      ajaxUrl:    el.getAttribute('data-ajax-url')    || '',
-      threshold:  parseFloat(el.getAttribute('data-threshold'))  || 0,
-      currency:   el.getAttribute('data-currency')    || '',
-      teaserTpl:  el.getAttribute('data-teaser-tpl')  || '',
-      successTpl: el.getAttribute('data-success-tpl') || '',
+      ajaxUrl:      el.getAttribute('data-ajax-url')       || '',
+      threshold:    parseFloat(el.getAttribute('data-threshold')) || 0,
+      currency:     el.getAttribute('data-currency')       || '',
+      teaserTpl:    el.getAttribute('data-teaser-tpl')     || '',
+      successTpl:   el.getAttribute('data-success-tpl')    || '',
+      /* true when the shop displays prices including tax.
+         In that case the PS updateCart event carries an inc-tax product total
+         which would not match our ex-tax threshold comparison — we must use
+         AJAX (which calls getOrderTotal(false, ONLY_PRODUCTS) server-side). */
+      pricesIncTax: el.getAttribute('data-prices-inc-tax') === '1',
     };
   }
 
@@ -202,11 +207,17 @@
     prestashop.on('updateCart', function (event) {
       if (!cfg) { return; }
 
-      /* Remove stale mini teaser — will be re-injected below */
-      var stale = document.querySelector('.fst-mini');
-      if (stale) { stale.remove(); }
+      if (cfg.pricesIncTax) {
+        /* Shop displays prices with tax. The PS updateCart event's
+           subtotals.products.amount is also inc-tax, which would give a wrong
+           progress value against an ex-tax threshold.
+           Delegate to AJAX which always calls getOrderTotal(false, ONLY_PRODUCTS). */
+        fetchAndUpdate(cfg);
+        return;
+      }
 
-      /* Try client-side calculation first (no HTTP round-trip) */
+      /* Shop displays prices ex-tax: subtotals.products.amount matches PHP.
+         Try client-side first (no extra HTTP round-trip). */
       var cartTotal = cartTotalFromEvent(event);
       if (cartTotal !== null) {
         var html = buildHtmlLocal(

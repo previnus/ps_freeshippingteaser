@@ -47,7 +47,8 @@ class Ps_freeshippingteaserAjaxModuleFrontController extends ModuleFrontControll
         }
         $currency     = $this->context->currency;
         $currencySign = ($currency !== null) ? $currency->sign : '';
-        $cartTotal    = (float) $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
+        // Ex-tax product subtotal — matches server-side comparison in renderTeaser().
+        $cartTotal    = (float) $cart->getOrderTotal(false, Cart::ONLY_PRODUCTS);
 
         $builder = new TeaserBuilder();
         $data    = $builder->build(

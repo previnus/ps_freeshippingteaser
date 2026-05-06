@@ -4,7 +4,8 @@
      data-threshold="{$fst_threshold|string_format:'%.2f'}"
      data-currency="{$fst_currency|escape:'html':'UTF-8'}"
      data-teaser-tpl="{$fst_teaser_tpl|escape:'html':'UTF-8'}"
-     data-success-tpl="{$fst_success_tpl|escape:'html':'UTF-8'}">
+     data-success-tpl="{$fst_success_tpl|escape:'html':'UTF-8'}"
+     data-prices-inc-tax="{if isset($fst_prices_inc_tax) && $fst_prices_inc_tax}1{else}0{/if}">
   {if $fst_qualified}
     <div class="fst-success">
       <span>{$fst_success_text|escape:'html':'UTF-8'}</span>
